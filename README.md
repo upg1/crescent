@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# Crescent
+
+Crescent is a Next.js application for education management, providing tools for students, parents, and teachers.
 
 ## Getting Started
 
-First, run the development server:
+First, set up the environment:
+
+```bash
+# Install dependencies
+npm install
+
+# Set up the database
+npx prisma generate
+npx prisma db push
+
+# Seed the database with initial data
+npx prisma db seed
+```
+
+Then run the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Testing
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+To run tests, use:
+
+```bash
+npm run test
+```
+
+For watching mode:
+
+```bash
+npm run test:watch
+```
+
+## Code Quality
+
+To lint your code:
+
+```bash
+npm run lint
+```
+
+## Project Structure
+
+- `src/app` - Next.js app router pages and API routes
+- `src/components` - Reusable React components
+- `src/hooks` - Custom React hooks
+- `src/lib` - Utility functions and library configurations
+- `prisma` - Database schema and migrations
+
+## Key Features
+
+- Authentication with NextAuth.js
+- Student, parent, and teacher roles
+- Course and book viewing
+- Note-taking system with Zettelkasten features
+- Feedback system for teachers
+- Analytics for tracking student progress
 
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
+- [Next.js Documentation](https://nextjs.org/docs)
 - [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deployment
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This application can be deployed on platforms like Vercel, AWS, or any other hosting service that supports Next.js applications.

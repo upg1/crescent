@@ -1,0 +1,1562 @@
+const { PrismaClient } = require('@prisma/client')
+const { hashPassword } = require('../src/lib/auth')
+
+const prisma = new PrismaClient()
+
+async function main() {
+  // Create users with different roles
+  const testUsers = [
+    { email: 'parent@example.com', name: 'Test Parent', password: 'test123', role: 'PARENT' },
+    { email: 'teacher@example.com', name: 'Test Teacher', password: 'test123', role: 'TEACHER' },
+    { email: 'admin@example.com', name: 'Test Admin', password: 'test123', role: 'ADMIN' },
+    // Add to testUsers array in seed.js
+    { email: 'staff@school.org', name: 'Test Staff User', password: 'test123', role: 'STAFF' }
+  ]
+
+  // Add to your seed.js file
+  // Generate more student test data with realistic attributes
+  const generateStudents = async (count) => {
+    const subjects = ['Math', 'Science', 'English', 'History'];
+    const activities = ['Reading', 'Practice Problems', 'Quiz', 'Discussion'];
+    const insightTypes = ['Connection', 'Pattern Recognition', 'Application', 'Question'];
+    
+    for (let i = 0; i < count; i++) {
+      const studentId = `student${i+1}`;
+      const hashedPassword = await hashPassword('test123');
+      
+      try {
+        // Create student
+        const student = await prisma.user.create({
+          data: {
+            email: `${studentId}@school.org`,
+            name: `Student ${i+1}`,
+            password: hashedPassword,
+            role: 'STUDENT',
+            // Create analytics data for this student
+            analytics: {
+              create: Array(Math.floor(Math.random() * 20) + 5).fill().map(() => ({
+                event: activities[Math.floor(Math.random() * activities.length)],
+                metadata: {
+                  duration: Math.floor(Math.random() * 60) + 10,
+                  completionRate: Math.random().toFixed(2),
+                  insightGenerated: Math.random() > 0.7,
+                  insightType: insightTypes[Math.floor(Math.random() * insightTypes.length)]
+                }
+              }))
+            },
+            // Create progress data
+            progress: {
+              create: subjects.map(subject => ({
+                completed: Math.random() > 0.5,
+                score: Math.floor(Math.random() * 100),
+                timeSpent: Math.floor(Math.random() * 300) + 60
+              }))
+            },
+            // Create notes with insight markers
+            notes: {
+              create: Array(Math.floor(Math.random() * 5) + 1).fill().map((_, idx) => ({
+                title: `Note ${idx+1} for ${studentId}`,
+                content: `This is a sample note with ${Math.random() > 0.6 ? 'an insight moment' : 'regular content'}.`,
+                tags: ['class', subjects[Math.floor(Math.random() * subjects.length)]],
+                visibility: Math.random() > 0.7 ? 'public' : 'private',
+                processed: false // Add the new field
+              }))
+            }
+          }
+        });
+        
+        console.log(`Created student: ${student.name}`);
+      } catch (error) {
+        console.error(`Error creating student ${studentId}:`, error);
+      }
+    }
+  };
+  
+  // Generate staff user with course progression data
+  const createStaffWithProgress = async () => {
+    // Check if staff user exists
+    let staffUser = await prisma.user.findFirst({
+      where: { role: 'STAFF', email: 'staff.testing@school.org' }
+    });
+    
+    if (!staffUser) {
+      const hashedPassword = await hashPassword('test123');
+      staffUser = await prisma.user.create({
+        data: {
+          email: 'staff.testing@school.org',
+          name: 'Staff Tester',
+          password: hashedPassword,
+          role: 'STAFF'
+        }
+      });
+      console.log('Created staff user for testing:', staffUser.name);
+    }
+    
+    // Create progress data for the staff user across multiple courses
+    const courses = await prisma.course.findMany();
+    
+    for (const course of courses) {
+      // Find books for this course
+      const books = await prisma.book.findMany({
+        where: { courseId: course.id }
+      });
+      
+      for (const book of books) {
+        // Find chapters for this book
+        const chapters = await prisma.chapter.findMany({
+          where: { bookId: book.id },
+          orderBy: { order: 'asc' }
+        });
+        
+        // Create different progress for different books
+        // First 2 books have complete progress, others are partially complete
+        const isCompleteBook = ['algebra-i-standards', 'chemistry-standards'].includes(book.slug);
+        
+        for (const chapter of chapters) {
+          // Create chapter progress
+          const chapterProgress = await prisma.progress.upsert({
+            where: {
+              id: `staff-${course.id}-${book.id}-${chapter.id}`
+            },
+            update: {},
+            create: {
+              id: `staff-${course.id}-${book.id}-${chapter.id}`,
+              userId: staffUser.id,
+              courseId: course.id,
+              bookId: book.id,
+              chapterId: chapter.id,
+              completed: isCompleteBook || chapter.order <= 2, // Complete first 2 chapters in all books
+              score: Math.floor(75 + Math.random() * 25), // Score between 75-100
+              timeSpent: Math.floor(30 + Math.random() * 90) // 30-120 minutes
+            }
+          });
+          
+          // Get paragraphs for this chapter
+          const paragraphs = await prisma.paragraph.findMany({
+            where: { chapterId: chapter.id },
+            orderBy: { order: 'asc' }
+          });
+          
+          // Create paragraph progress (only for chapters that are complete or in progress)
+          if (isCompleteBook || chapter.order <= 3) {
+            for (const paragraph of paragraphs) {
+              const paragraphCompleted = isCompleteBook || 
+                                        (chapter.order < 3) || 
+                                        (chapter.order === 3 && paragraph.order <= Math.ceil(paragraphs.length * 0.6));
+              
+              await prisma.progress.upsert({
+                where: {
+                  id: `staff-${course.id}-${book.id}-${chapter.id}-${paragraph.id}`
+                },
+                update: {},
+                create: {
+                  id: `staff-${course.id}-${book.id}-${chapter.id}-${paragraph.id}`,
+                  userId: staffUser.id,
+                  courseId: course.id,
+                  bookId: book.id,
+                  chapterId: chapter.id,
+                  paragraphId: paragraph.id,
+                  completed: paragraphCompleted,
+                  score: paragraphCompleted ? Math.floor(80 + Math.random() * 20) : null,
+                  timeSpent: paragraphCompleted ? Math.floor(5 + Math.random() * 15) : null
+                }
+              });
+            }
+          }
+          
+          // Create notes for completed chapters
+          if (isCompleteBook || chapter.order <= 2) {
+            // Create 1-3 notes per chapter
+            const noteCount = Math.floor(1 + Math.random() * 3);
+            for (let i = 0; i < noteCount; i++) {
+              const noteType = Math.random() > 0.5 ? 'permanent' : 'literature';
+              await prisma.note.create({
+                data: {
+                  title: `${book.title} - ${chapter.title} Note ${i+1}`,
+                  content: `These are my staff notes on ${chapter.title}. Key points to remember for this chapter include the main concepts and formulas.`,
+                  userId: staffUser.id,
+                  tags: [course.title.toLowerCase(), 'staff notes', 'chapter summary'],
+                  type: noteType,
+                  sourceId: chapter.id,
+                  sourceType: 'chapter',
+                  visibility: Math.random() > 0.3 ? 'public' : 'private',
+                  processed: false
+                }
+              });
+            }
+          }
+        }
+        
+        // Create course-level progression record
+        const courseProgress = await prisma.progress.upsert({
+          where: {
+            id: `staff-${course.id}`
+          },
+          update: {},
+          create: {
+            id: `staff-${course.id}`,
+            userId: staffUser.id,
+            courseId: course.id,
+            completed: isCompleteBook,
+            score: isCompleteBook ? 90 : Math.floor(50 + Math.random() * 30),
+            timeSpent: isCompleteBook ? 600 : Math.floor(200 + Math.random() * 300)
+          }
+        });
+        
+        // Create book-level progression record
+        const bookProgress = await prisma.progress.upsert({
+          where: {
+            id: `staff-${course.id}-${book.id}`
+          },
+          update: {},
+          create: {
+            id: `staff-${course.id}-${book.id}`,
+            userId: staffUser.id,
+            courseId: course.id,
+            bookId: book.id,
+            completed: isCompleteBook,
+            score: isCompleteBook ? 92 : Math.floor(60 + Math.random() * 25),
+            timeSpent: isCompleteBook ? 500 : Math.floor(150 + Math.random() * 250)
+          }
+        });
+      }
+    }
+    
+    console.log('Created staff progress data for testing.');
+  };
+  
+  // Add this to your main function
+  await generateStudents(30); // Generate 30 mock students
+  
+  // Create staff user with progression data
+  await createStaffWithProgress();
+  
+  const users = {}
+  
+  // Create users or fetch existing ones
+  for (const userData of testUsers) {
+    const { email, name, password, role } = userData
+    
+    // Check if user already exists
+    let user = await prisma.user.findUnique({
+      where: { email }
+    })
+    
+    if (!user) {
+      // Create new user
+      const hashedPassword = await hashPassword(password)
+      
+      user = await prisma.user.create({
+        data: {
+          email,
+          name,
+          password: hashedPassword,
+          role,
+        },
+      })
+      
+      console.log(`Created ${role} user:`, user)
+    } else {
+      console.log(`${role} user already exists:`, user)
+    }
+    
+    users[role] = user
+  }
+
+  // Create courses with NYSED standards-aligned content
+  const courses = []
+
+  // Algebra I
+  let algebra1 = await prisma.course.findUnique({
+    where: { slug: 'algebra-i' }
+  })
+  
+  if (!algebra1) {
+    algebra1 = await prisma.course.create({
+      data: {
+        title: 'Algebra I',
+        description: 'Introduction to algebraic concepts and problem-solving techniques aligned with NYSED standards',
+        slug: 'algebra-i'
+      }
+    })
+  }
+  
+  // Create Algebra I book
+  let algebra1Book = await prisma.book.findUnique({
+    where: { slug: 'algebra-i-standards' }
+  })
+  
+  if (!algebra1Book) {
+    algebra1Book = await prisma.book.create({
+      data: {
+        title: 'Algebra I: NYSED Standards Edition',
+        description: 'Comprehensive guide to Algebra I aligned with New York State Education Department standards',
+        slug: 'algebra-i-standards',
+        course: {
+          connect: { id: algebra1.id }
+        }
+      }
+    })
+  }
+
+  // Geometry
+  let geometry = await prisma.course.findUnique({
+    where: { slug: 'geometry' }
+  })
+  
+  if (!geometry) {
+    geometry = await prisma.course.create({
+      data: {
+        title: 'Geometry',
+        description: 'Study of geometric concepts and proofs aligned with NYSED standards',
+        slug: 'geometry'
+      }
+    })
+  }
+
+  // Create Geometry book
+  let geometryBook = await prisma.book.findUnique({
+    where: { slug: 'geometry-standards' }
+  })
+  
+  if (!geometryBook) {
+    geometryBook = await prisma.book.create({
+      data: {
+        title: 'Geometry: NYSED Standards Edition',
+        description: 'Comprehensive guide to Geometry aligned with New York State Education Department standards',
+        slug: 'geometry-standards',
+        course: {
+          connect: { id: geometry.id }
+        }
+      }
+    })
+  }
+
+  // Living Environment
+  let livingEnvironment = await prisma.course.findUnique({
+    where: { slug: 'living-environment' }
+  })
+  
+  if (!livingEnvironment) {
+    livingEnvironment = await prisma.course.create({
+      data: {
+        title: 'Living Environment',
+        description: 'Study of biological concepts aligned with NYSED standards',
+        slug: 'living-environment'
+      }
+    })
+  }
+
+  // Create Living Environment book
+  let livingEnvironmentBook = await prisma.book.findUnique({
+    where: { slug: 'living-environment-standards' }
+  })
+  
+  if (!livingEnvironmentBook) {
+    livingEnvironmentBook = await prisma.book.create({
+      data: {
+        title: 'Living Environment: NYSED Standards Edition',
+        description: 'Comprehensive guide to Living Environment aligned with New York State Education Department standards',
+        slug: 'living-environment-standards',
+        course: {
+          connect: { id: livingEnvironment.id }
+        }
+      }
+    })
+  }
+
+  // Chemistry
+  let chemistry = await prisma.course.findUnique({
+    where: { slug: 'chemistry' }
+  })
+  
+  if (!chemistry) {
+    chemistry = await prisma.course.create({
+      data: {
+        title: 'Chemistry',
+        description: 'Study of chemical concepts and reactions aligned with NYSED standards',
+        slug: 'chemistry'
+      }
+    })
+  }
+
+  // Create Chemistry book
+  let chemistryBook = await prisma.book.findUnique({
+    where: { slug: 'chemistry-standards' }
+  })
+  
+  if (!chemistryBook) {
+    chemistryBook = await prisma.book.create({
+      data: {
+        title: 'Chemistry: NYSED Standards Edition',
+        description: 'Comprehensive guide to Chemistry aligned with New York State Education Department standards',
+        slug: 'chemistry-standards',
+        course: {
+          connect: { id: chemistry.id }
+        }
+      }
+    })
+  }
+
+  // Social Studies
+  let socialStudies = await prisma.course.findUnique({
+    where: { slug: 'social-studies' }
+  })
+  
+  if (!socialStudies) {
+    socialStudies = await prisma.course.create({
+      data: {
+        title: 'Social Studies',
+        description: 'Study of history, geography, and civics aligned with NYSED standards',
+        slug: 'social-studies'
+      }
+    })
+  }
+
+  // Create Social Studies book
+  let socialStudiesBook = await prisma.book.findUnique({
+    where: { slug: 'social-studies-standards' }
+  })
+  
+  if (!socialStudiesBook) {
+    socialStudiesBook = await prisma.book.create({
+      data: {
+        title: 'Social Studies: NYSED Standards Edition',
+        description: 'Comprehensive guide to Social Studies aligned with New York State Education Department standards',
+        slug: 'social-studies-standards',
+        course: {
+          connect: { id: socialStudies.id }
+        }
+      }
+    })
+  }
+
+  // Create chapters for each course
+  const allChapters = [
+    { 
+      bookId: algebra1Book.id, 
+      chapters: [
+        {
+          title: 'Chapter 1: Expressions, Equations, and Functions',
+          order: 1,
+          sections: [
+            {
+              title: "1.1 Introduction to Algebra",
+              order: 1,
+              paragraphs: [
+                {
+                  content: "Welcome to Algebra I! In this chapter, we'll explore the fundamental concepts that form the foundation of algebra. We'll start by understanding what algebra is and why it's important in our daily lives and in various fields such as science, engineering, and economics.",
+                  order: 1
+                },
+                {
+                  content: "Key concepts in this chapter include: variables, expressions, equations, and functions. We'll learn how to translate real-world problems into mathematical expressions and solve them using algebraic methods.",
+                  order: 2
+                },
+                {
+                  content: "**Learning Objectives (NYSED Standards A-SSE.1, A-CED.1-2)**\n- Identify and use variables in mathematical expressions\n- Write and evaluate algebraic expressions\n- Solve simple equations\n- Understand the concept of functions and their representations\n- Apply algebraic concepts to solve real-world problems",
+                  order: 3
+                }
+              ]
+            },
+            {
+              title: "1.2 Variables and Expressions",
+              order: 2,
+              paragraphs: [
+                {
+                  content: "Algebraic expressions are combinations of variables, numbers, and operations. A variable is a symbol, usually a letter, that represents an unknown value or a value that can change. For example, in the expression $3x + 2$, $x$ is a variable, and the expression represents 'three times $x$ plus 2'.\n\nConsider how we use variables in daily life: if you're saving money for a concert ticket, you might track the amount saved ($s$) after a certain number of weeks ($w$). This could be represented as $s = 10w$ if you save $10 per week.",
+                  order: 1
+                },
+                {
+                  content: "When evaluating an expression, we substitute a specific value for each variable and then calculate the result. For example, to evaluate $3x + 2$ when $x = 4$, substitute $4$ for $x$:\n$3x + 2 = 3(4) + 2 = 12 + 2 = 14$",
+                  order: 3
+                },
+                {
+                  content: "**Example 1:** Evaluate the expression $2a^2 - 5a + 3$ when $a = -2$.\n\n**Solution:**\n$2a^2 - 5a + 3 = 2(-2)^2 - 5(-2) + 3$\n$= 2(4) - 5(-2) + 3$\n$= 8 + 10 + 3$\n$= 21$",
+                  order: 4
+                }
+              ],
+              figures: [
+                {
+                  title: "Variable Expressions",
+                  caption: "This graph shows how the value of the expression $3x + 2$ changes as the value of $x$ changes.",
+                  imageUrl: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80",
+                  order: 2
+                }
+              ],
+              exercises: [
+                {
+                  content: "1. Evaluate $4x - 7$ when $x = 3$.\n2. Evaluate $y^2 + 2y - 8$ when $y = -1$.\n3. If $P = 2l + 2w$, find $P$ when $l = 5$ and $w = 3$.\n4. Write an expression for the area of a rectangle with length $l$ and width $l - 2$.\n5. A cell phone plan costs $\\$25$ per month plus $\\$0.10$ per text message. Write an expression for the monthly cost if you send $t$ text messages.",
+                  type: "problem-solving",
+                  difficultyLevel: "medium",
+                  solution: "1. $4(3) - 7 = 12 - 7 = 5$\n2. $(-1)^2 + 2(-1) - 8 = 1 - 2 - 8 = -9$\n3. $P = 2(5) + 2(3) = 10 + 6 = 16$\n4. $A = l(l-2) = l^2 - 2l$\n5. $C = 25 + 0.10t$",
+                  order: 5
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+            {
+              content: "Key topics include solving linear equations, understanding inequality symbols, and representing solutions on a number line."
+            },
+            {
+              content: "- Solve single-step and multi-step linear equations\n- Graph linear equations on a coordinate plane\n- Interpret inequalities in real-world contexts\n- Apply these concepts to problem-solving scenarios"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 3: Polynomials and Factoring',
+          order: 3,
+          paragraphs: [
+            {
+              content: "Embark on an adventure through the landscape of polynomials. Visualize each term as a building block in a grand castle of numbers, where factoring reveals hidden passages and secret chambers."
+            },
+            {
+              content: "We will explore the structure of polynomials, the art of factoring, and the beauty of algebraic identities."
+            },
+            {
+              content: "- Identify different types of polynomials\n- Factor polynomials using various methods\n- Understand the role of the distributive property\n- Apply factoring techniques to simplify expressions"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 4: Rational Expressions and Functions',
+          order: 4,
+          paragraphs: [
+            {
+              content: "Imagine a world where fractions meet functions—a realm of rational expressions that capture the essence of complex relationships. This chapter guides you through the process of simplifying, multiplying, and dividing these expressions as if solving a fascinating puzzle."
+            },
+            {
+              content: "We'll uncover how rational functions model real-world situations in areas ranging from economics to engineering."
+            },
+            {
+              content: "- Simplify rational expressions\n- Solve rational equations\n- Analyze the behavior of rational functions\n- Relate these concepts to everyday problems"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 5: Introduction to Quadratic Equations',
+          order: 5,
+          paragraphs: [
+            {
+              content: "Quadratic equations open the door to a universe of curves and parabolas, where each solution is a step in a dance of symmetry and balance. In this chapter, discover the magic behind the quadratic formula and its real-world applications."
+            },
+            {
+              content: "We will journey through methods of solving quadratics including factoring, completing the square, and applying the quadratic formula."
+            },
+            {
+              content: "- Recognize and classify quadratic equations\n- Solve quadratics by multiple methods\n- Interpret the significance of the discriminant\n- Connect quadratic functions to physical phenomena"
+            }
+          ]
+        }
+      ]
+    },
+    { 
+      bookId: geometryBook.id, 
+      chapters: [
+        {
+          title: 'Chapter 1: Tools of Geometry',
+          order: 1,
+          sections: [
+            {
+              title: "1.1 Introduction to Geometry",
+              order: 1,
+              paragraphs: [
+                {
+                  content: "Geometry is the study of shapes, sizes, and positions of figures. In this introductory chapter, we'll explore the basic tools and concepts that will help us understand and work with geometric figures.",
+                  order: 1
+                },
+                {
+                  content: "Key topics in this chapter include: points, lines, planes, angles, and basic geometric constructions. We'll learn how to use these tools to build a solid foundation in geometry.",
+                  order: 2
+                },
+                {
+                  content: "**Learning Objectives:**\n- Identify and name geometric figures\n- Measure and classify angles\n- Perform basic geometric constructions\n- Understand the properties of parallel and perpendicular lines\n- Apply geometric concepts to solve problems",
+                  order: 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: 'Chapter 2: The World of Shapes and Symmetry',
+          order: 2,
+          sections: [
+            {
+              title: "2.1 Exploring Geometric Shapes",
+              order: 1,
+              paragraphs: [
+                {
+                  content: "Travel back in time to the cradle of civilization, where early societies laid the groundwork for modern culture. This chapter explores the innovations and traditions of ancient peoples.",
+                  order: 1
+                },
+                {
+                  content: "Discover the art, science, and governance that set the stage for centuries of human achievement.",
+                  order: 2
+                },
+                {
+                  content: "**Learning Objectives:**\n- Identify key ancient civilizations\n- Understand their contributions to art, science, and governance\n- Analyze factors leading to their rise and decline",
+                  order: 3
+                }
+              ]
+            }
+          ]
+        },
+        {
+          title: 'Chapter 3: Angles, Lines, and Circles',
+          order: 3,
+          paragraphs: [
+            {
+              content: "Join us on a journey around circles and through the world of angles and lines, where every measurement adds a verse to a larger story of relationships and patterns."
+            },
+            {
+              content: "Key areas include the properties of angles, the significance of circle theorems, and the interplay between straight lines and curves."
+            },
+            {
+              content: "- Measure and classify angles\n- Understand circle theorems and properties\n- Explore relationships between angles and intersecting lines"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 4: Transformations and Congruence',
+          order: 4,
+          paragraphs: [
+            {
+              content: "Imagine moving shapes around like pieces of a puzzle. In this chapter, we explore transformations—translations, rotations, reflections, and dilations—that change a figure’s position without altering its identity."
+            },
+            {
+              content: "Learn how these movements reveal deeper truths about congruence and similarity in geometry."
+            },
+            {
+              content: "- Perform geometric transformations\n- Understand the principles of congruence and similarity\n- Apply transformation concepts to solve complex geometric problems"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 5: The Story of Proofs and Theorems',
+          order: 5,
+          paragraphs: [
+            {
+              content: "Every mathematical discovery has a story. In this chapter, we delve into the art of logical reasoning through geometric proofs and theorems, where each step builds on the last like chapters in an epic saga."
+            },
+            {
+              content: "Explore how structured arguments and clear reasoning help us unlock timeless truths in geometry."
+            },
+            {
+              content: "- Understand the structure of geometric proofs\n- Develop logical reasoning skills\n- Apply proofs to validate theorems and solve problems"
+            }
+          ]
+        }
+      ]
+    },
+    { 
+      bookId: livingEnvironmentBook.id, 
+      chapters: [
+        {
+          title: 'Chapter 1: The Chemistry of Life',
+          order: 1,
+          paragraphs: [
+            {
+              content: "Welcome to the study of living things! In this chapter, we'll explore the fundamental chemical processes that make life possible. Discover what makes something 'living' and how chemical reactions sustain every organism."
+            },
+            {
+              content: "Key concepts include atoms, molecules, chemical bonds, and the properties of water that enable biological processes."
+            },
+            {
+              content: "- Describe the basic structure of atoms and molecules\n- Understand the importance of chemical bonds in biology\n- Explain the unique properties of water\n- Identify major organic molecules essential for life"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 2: Cells – The Building Blocks of Life',
+          order: 2,
+          paragraphs: [
+            {
+              content: "Dive into the microscopic world where cells reveal the grand design of living organisms. This chapter tells the story of how tiny structures combine to form the complex tapestry of life."
+            },
+            {
+              content: "We’ll explore cell theory, cell structure, and the functions of various organelles in detail."
+            },
+            {
+              content: "- Identify the components of cells\n- Understand the functions of cellular organelles\n- Relate cell structure to overall biological function"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 3: Genetics – The Story of Inheritance',
+          order: 3,
+          paragraphs: [
+            {
+              content: "Imagine a family tree that stretches back through time—this is the story of genetics. In this chapter, we unravel how traits and characteristics are passed down through generations."
+            },
+            {
+              content: "Explore the roles of DNA, genes, and the mechanisms behind inheritance, bringing a personal touch to scientific discovery."
+            },
+            {
+              content: "- Understand the basics of DNA and genes\n- Learn about Mendelian genetics\n- Appreciate how genetics influences evolution and diversity"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 4: Ecosystems – The Web of Life',
+          order: 4,
+          paragraphs: [
+            {
+              content: "Venture into the interconnected world of ecosystems, where every organism plays a part in a complex, living tapestry. This chapter highlights the delicate balance that sustains natural habitats."
+            },
+            {
+              content: "We will study the interactions between living things and their environments, discovering how energy flows through food chains and webs."
+            },
+            {
+              content: "- Recognize the components of ecosystems\n- Understand food chains and food webs\n- Analyze the impact of human activities on natural balance"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 5: Evolution – Change and Adaptation',
+          order: 5,
+          paragraphs: [
+            {
+              content: "Evolution is the epic tale of life adapting over millennia. In this chapter, you'll explore the forces that drive change—from natural selection to genetic variation—and witness the story of survival and innovation."
+            },
+            {
+              content: "Discover how species evolve and adapt in response to a dynamic and ever-changing environment."
+            },
+            {
+              content: "- Explain the principles of natural selection\n- Recognize evidence of evolution in nature\n- Understand the impact of evolutionary processes on biodiversity"
+            }
+          ]
+        }
+      ]
+    },
+    { 
+      bookId: chemistryBook.id, 
+      chapters: [
+        {
+          title: 'Chapter 1: Matter and Energy',
+          order: 1,
+          paragraphs: [
+            {
+              content: "Welcome to the study of chemistry! In this chapter, we'll explore the fundamental concepts of matter and energy, which form the basis of all chemical processes."
+            },
+            {
+              content: "Key topics include properties of matter, changes in matter, and the scientific method as a way to uncover chemical truths."
+            },
+            {
+              content: "- Distinguish between physical and chemical properties\n- Identify different states of matter\n- Understand the law of conservation of mass\n- Apply the scientific method to chemical investigations"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 2: The Periodic Table – A Tale of Elements',
+          order: 2,
+          paragraphs: [
+            {
+              content: "Embark on a journey through the periodic table, where each element has its own story. Meet the characters of the material world and discover how their properties create a grand narrative of science."
+            },
+            {
+              content: "We’ll explore how elements are organized and the trends that reveal their hidden properties."
+            },
+            {
+              content: "- Understand the organization of the periodic table\n- Recognize trends in element properties\n- Relate elemental behavior to chemical reactions"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 3: Chemical Reactions – The Dance of Atoms',
+          order: 3,
+          paragraphs: [
+            {
+              content: "Picture a dance floor where atoms move in a graceful, coordinated performance. In this chapter, chemical reactions come alive as a vibrant dance that transforms substances."
+            },
+            {
+              content: "Explore different types of reactions and the principles that guide these energetic exchanges."
+            },
+            {
+              content: "- Identify various types of chemical reactions\n- Understand reaction mechanisms\n- Predict the outcomes of chemical processes"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 4: Acids, Bases, and pH',
+          order: 4,
+          paragraphs: [
+            {
+              content: "Step into the intriguing world of acids and bases—a tale of opposites attracting and transforming. This chapter demystifies pH and its critical role in both nature and industry."
+            },
+            {
+              content: "Learn about the characteristics of acids and bases and how pH measurements bring clarity to chemical behavior."
+            },
+            {
+              content: "- Distinguish between acids and bases\n- Measure and interpret pH levels\n- Apply these concepts to everyday phenomena"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 5: Organic Chemistry – Life’s Molecular Orchestra',
+          order: 5,
+          paragraphs: [
+            {
+              content: "Organic chemistry is the symphony of life, where carbon-based molecules perform in a grand orchestra that sustains living systems. In this chapter, explore the vibrant world of organic compounds."
+            },
+            {
+              content: "We will dive into the structures, reactions, and functions of organic molecules, unveiling the harmony behind biological processes."
+            },
+            {
+              content: "- Understand the fundamentals of organic compounds\n- Explore common organic reactions\n- Recognize the role of organic chemistry in biology and industry"
+            }
+          ]
+        }
+      ]
+    },
+    { 
+      bookId: socialStudiesBook.id, 
+      chapters: [
+        {
+          title: 'Chapter 1: World History',
+          order: 1,
+          paragraphs: [
+            {
+              content: "Welcome to Social Studies! In this chapter, we'll explore the development of human civilization from ancient times to the present, examining how societies have evolved and interacted."
+            },
+            {
+              content: "Key topics include early human civilizations, the development of agriculture, the rise of empires, and pivotal historical events."
+            },
+            {
+              content: "- Analyze the characteristics of early civilizations\n- Understand the impact of geography on human development\n- Identify major historical trends and events"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 2: Ancient Civilizations – Foundations of Society',
+          order: 2,
+          paragraphs: [
+            {
+              content: "Travel back in time to the cradle of civilization, where early societies laid the groundwork for modern culture. This chapter explores the innovations and traditions of ancient peoples."
+            },
+            {
+              content: "Discover the art, science, and governance that set the stage for centuries of human achievement."
+            },
+            {
+              content: "- Identify key ancient civilizations\n- Understand their contributions to art, science, and governance\n- Analyze factors leading to their rise and decline"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 3: The Middle Ages – A Tapestry of Change',
+          order: 3,
+          paragraphs: [
+            {
+              content: "Step into a time of knights, castles, and transformative ideas. In this chapter, we weave a tapestry of medieval life, examining the complexities of feudal society and the seeds of modernity."
+            },
+            {
+              content: "Uncover the cultural, economic, and political threads that defined the Middle Ages."
+            },
+            {
+              content: "- Understand the structure of feudal society\n- Explore the cultural achievements of the era\n- Analyze the transition from medieval to modern times"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 4: Modern Era – Revolution and Innovation',
+          order: 4,
+          paragraphs: [
+            {
+              content: "In the modern era, revolutions and innovations have reshaped human society. This chapter tells the story of industrial advances, scientific breakthroughs, and social changes that transformed the world."
+            },
+            {
+              content: "Explore how dramatic shifts in technology and thought redefined the human experience."
+            },
+            {
+              content: "- Understand the impact of the Industrial Revolution\n- Recognize key innovations that changed society\n- Analyze social and political shifts of the modern age"
+            }
+          ]
+        },
+        {
+          title: 'Chapter 5: Contemporary Challenges – Globalization and Identity',
+          order: 5,
+          paragraphs: [
+            {
+              content: "Today’s world is a complex mosaic of cultures, economies, and ideas. In this final chapter, we explore contemporary challenges from globalization to evolving cultural identities."
+            },
+            {
+              content: "Discover how historical narratives inform current events and shape the future of our global society."
+            },
+            {
+              content: "- Analyze the effects of globalization\n- Understand cultural and political identity in a global context\n- Reflect on the role of history in contemporary society"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+
+  // Create chapters, sections, and content (paragraphs, exercises, figures)
+  for (const { bookId, chapters } of allChapters) {
+    for (const chapter of chapters) {
+      let chapterRecord = await prisma.chapter.findUnique({
+        where: { title_bookId: { title: chapter.title, bookId } }
+      })
+      
+      if (!chapterRecord) {
+        chapterRecord = await prisma.chapter.create({
+          data: {
+            title: chapter.title,
+            order: chapter.order,
+            book: {
+              connect: { id: bookId }
+            }
+          }
+        })
+      }
+
+      // Create a default section if none provided
+      if (!chapter.sections || chapter.sections.length === 0) {
+        const defaultSection = {
+          title: "Introduction",
+          order: 1,
+          paragraphs: chapter.paragraphs || []
+        };
+        chapter.sections = [defaultSection];
+      }
+
+      // Create sections for the chapter
+      for (const section of chapter.sections) {
+        let sectionRecord = await prisma.section.findUnique({
+          where: { title_chapterId: { title: section.title, chapterId: chapterRecord.id } }
+        })
+        
+        if (!sectionRecord) {
+          sectionRecord = await prisma.section.create({
+            data: {
+              title: section.title,
+              description: section.description,
+              order: section.order,
+              chapter: {
+                connect: { id: chapterRecord.id }
+              }
+            }
+          })
+        }
+
+        // Create paragraphs for the section
+        if (section.paragraphs) {
+          for (const paragraph of section.paragraphs) {
+            let paragraphContent = typeof paragraph === 'string' ? paragraph : paragraph.content;
+            let paragraphOrder = typeof paragraph === 'string' ? 
+              section.paragraphs.indexOf(paragraph) + 1 : 
+              paragraph.order || section.paragraphs.indexOf(paragraph) + 1;
+              
+            let paragraphRecord = await prisma.paragraph.findUnique({
+              where: { content_sectionId: { content: paragraphContent, sectionId: sectionRecord.id } }
+            })
+            
+            if (!paragraphRecord) {
+              await prisma.paragraph.create({
+                data: {
+                  content: paragraphContent,
+                  order: paragraphOrder,
+                  section: {
+                    connect: { id: sectionRecord.id }
+                  }
+                }
+              })
+            }
+          }
+        }
+
+        // Create exercises for the section
+        if (section.exercises) {
+          for (const exercise of section.exercises) {
+            let exerciseContent = typeof exercise === 'string' ? exercise : exercise.content;
+            let exerciseOrder = typeof exercise === 'string' ? 
+              section.exercises.indexOf(exercise) + 1 : 
+              exercise.order || section.exercises.indexOf(exercise) + 1;
+              
+            let exerciseSolution = typeof exercise === 'string' ? null : exercise.solution;
+            let exerciseType = typeof exercise === 'string' ? null : exercise.type;
+            let exerciseDifficulty = typeof exercise === 'string' ? null : exercise.difficultyLevel;
+              
+            let exerciseRecord = await prisma.exercise.findUnique({
+              where: { content_sectionId: { content: exerciseContent, sectionId: sectionRecord.id } }
+            })
+            
+            if (!exerciseRecord) {
+              await prisma.exercise.create({
+                data: {
+                  content: exerciseContent,
+                  solution: exerciseSolution,
+                  type: exerciseType,
+                  difficultyLevel: exerciseDifficulty,
+                  order: exerciseOrder,
+                  section: {
+                    connect: { id: sectionRecord.id }
+                  }
+                }
+              })
+            }
+          }
+        }
+
+        // Create figures for the section
+        if (section.figures) {
+          for (const figure of section.figures) {
+            // Figures must be objects with at least imageUrl
+            if (typeof figure !== 'object' || !figure.imageUrl) continue;
+              
+            let figureOrder = figure.order || section.figures.indexOf(figure) + 1;
+              
+            await prisma.figure.create({
+              data: {
+                title: figure.title,
+                caption: figure.caption,
+                imageUrl: figure.imageUrl,
+                order: figureOrder,
+                section: {
+                  connect: { id: sectionRecord.id }
+                }
+              }
+            })
+          }
+        }
+      }
+    }
+  }
+
+  console.log('Created all chapters and paragraphs')
+
+  // Create sample progress for student
+  if (users.STUDENT) {
+    const existingProgress = await prisma.progress.count({
+      where: {
+        userId: users.STUDENT.id
+      }
+    })
+    
+    if (existingProgress === 0) {
+      // Create progress for Algebra I Chapter 1
+      const progress = await prisma.progress.create({
+        data: {
+          userId: users.STUDENT.id,
+          courseId: algebra1.id,
+          bookId: algebra1Book.id,
+          chapterId: (await prisma.chapter.findFirst({
+            where: { bookId: algebra1Book.id }
+          })).id,
+          completed: false,
+          score: 0,
+          timeSpent: 0 // minutes
+        }
+      })
+      
+      console.log('Created sample progress data:', progress)
+    }
+  }
+
+  // Create sample notes
+  if (users.STUDENT) {
+    const existingNotes = await prisma.note.count({
+      where: {
+        userId: users.STUDENT.id
+      }
+    })
+    
+    if (existingNotes === 0) {
+      // Create a concept first
+      let concept = await prisma.concept.findUnique({
+        where: { name: 'Algebra' }
+      })
+      
+      if (!concept) {
+        concept = await prisma.concept.create({
+          data: {
+            name: 'Algebra',
+            description: 'The study of mathematical symbols and the rules for manipulating these symbols'
+          }
+        })
+      }
+
+      // Create a parent note
+      let parentNote = await prisma.note.findUnique({
+        where: { title_userId: { title: 'Quadratic Formula', userId: users.STUDENT.id } }
+      })
+      
+      if (!parentNote) {
+        parentNote = await prisma.note.create({
+          data: {
+            title: 'Quadratic Formula',
+            content: 'The quadratic formula is used to solve quadratic equations.',
+            userId: users.STUDENT.id,
+            tags: ['algebra', 'formula'],
+            type: 'permanent',
+            conceptId: concept.id
+          }
+        })
+      }
+
+      // Create a child note
+      let childNote = await prisma.note.findUnique({
+        where: { title_userId: { title: 'Completing the Square', userId: users.STUDENT.id } }
+      })
+      
+      if (!childNote) {
+        childNote = await prisma.note.create({
+          data: {
+            title: 'Completing the Square',
+            content: 'Completing the square is a method used to derive the quadratic formula.',
+            userId: users.STUDENT.id,
+            tags: ['algebra', 'technique'],
+            type: 'literature',
+            conceptId: concept.id,
+            parentNoteId: parentNote.id
+          }
+        })
+      }
+
+      // Create a related note
+      let relatedNote = await prisma.note.findUnique({
+        where: { title_userId: { title: 'Quadratic Equations', userId: users.STUDENT.id } }
+      })
+      
+      if (!relatedNote) {
+        relatedNote = await prisma.note.create({
+          data: {
+            title: 'Quadratic Equations',
+            content: 'Quadratic equations are polynomial equations of degree 2.',
+            userId: users.STUDENT.id,
+            tags: ['algebra', 'equations'],
+            type: 'permanent',
+            conceptId: concept.id,
+            relatedNotes: {
+              connect: [{ id: parentNote.id }]
+            }
+          }
+        })
+      }
+
+      // Connect parent note to related note
+      await prisma.note.update({
+        where: { id: parentNote.id },
+        data: {
+          relatedNotes: {
+            connect: [{ id: relatedNote.id }]
+          }
+        }
+      })
+
+      console.log('Created sample notes')
+    }
+  }
+
+  // Create sample feedback
+  if (users.PARENT) {
+    const existingFeedback = await prisma.feedback.count({
+      where: {
+        userId: users.PARENT.id
+      }
+    })
+    
+    if (existingFeedback === 0) {
+      const feedback = await prisma.feedback.create({
+        data: {
+          userId: users.PARENT.id,
+          courseId: algebra1.id,
+          bookId: algebra1Book.id,
+          chapterId: (await prisma.chapter.findFirst({
+            where: { bookId: algebra1Book.id }
+          })).id,
+          elementContent: 'This is a sample paragraph with content that received feedback.',
+          feedbackType: 'rephrase',
+          comment: 'This section could be explained in simpler terms for younger students.',
+          status: 'pending'
+        }
+      })
+      
+      console.log('Created sample feedback:', feedback)
+    }
+  }
+
+  // Create access settings for parent
+  if (users.PARENT) {
+    const existingSettings = await prisma.accessSettings.findUnique({
+      where: {
+        userId: users.PARENT.id
+      }
+    })
+    
+    if (!existingSettings) {
+      const settings = await prisma.accessSettings.create({
+        data: {
+          userId: users.PARENT.id,
+          timeLimit: 120, // 2 hours daily
+          contentFilters: ['mature_content', 'social_media'],
+          notificationsEnabled: true,
+          progressReports: true
+        }
+      })
+      
+      console.log('Created access settings:', settings)
+    }
+  }
+  
+  // Create memory structure data (for Story Method and Memory Palace)
+  const createMemoryStructures = async () => {
+    console.log('Starting to create memory structures...')
+    
+    // Find students for Algebra I and Chemistry
+    const students = await prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      take: 10 // Limit to first 10 students
+    })
+    
+    if (students.length === 0) {
+      console.log('No student users found')
+      return
+    }
+    
+    // Create memory structures for Algebra I (Using Story Method / Linked List)
+    const algebraConcepts = [
+      {
+        title: 'Quadratic Formula',
+        content: 'x = (-b ± √(b² - 4ac)) / 2a',
+        storyElement: 'A mathematician named Quad was split in two (±) after falling down a hole (negative b). In the hole was a magical square root that let him see the discriminant (b² - 4ac). To escape, he had to divide himself by twice his original weight (2a).'
+      },
+      {
+        title: 'FOIL Method',
+        content: 'First, Outer, Inner, Last - Method for multiplying binomials',
+        storyElement: 'Four knights (First, Outer, Inner, Last) were wrapped in aluminum FOIL armor. Each had to battle in their designated order to multiply the kingdom\'s wealth.'
+      },
+      {
+        title: 'Slope Formula',
+        content: 'm = (y₂ - y₁) / (x₂ - x₁)',
+        storyElement: 'A mountain climber measured the mountain\'s slope by tracking how much height (y₂ - y₁) he gained for each step forward (x₂ - x₁).'
+      },
+      {
+        title: 'Pythagorean Theorem',
+        content: 'a² + b² = c²',
+        storyElement: 'In an ancient square town (a²), a second square town (b²) merged with it to create a perfect square territory (c²) for the ruler Pythagoras.'
+      },
+      {
+        title: 'Linear Equation',
+        content: 'y = mx + b',
+        storyElement: 'A line named "y" was born from its mother "m" (slope) and father "x", but always carried with it the magic boost "b" that determined its starting position.'
+      }
+    ]
+    
+    // Create memory structures for Chemistry (Using Memory Palace / Array)
+    const chemistryConcepts = [
+      {
+        title: 'Periodic Table Regions',
+        content: 'The periodic table is organized into metals, nonmetals, and metalloids',
+        location: 'Grand Entrance Hall',
+        description: 'A magnificent hall with three distinct zones - a metallic silver section on the left, a colorful gaseous section on the right, and a gradient zone in between.'
+      },
+      {
+        title: 'Atomic Structure',
+        content: 'Atoms consist of protons, neutrons, and electrons',
+        location: 'Central Rotunda',
+        description: 'A circular room with a model of an atom hanging from the ceiling - red protons and neutral neutrons clustered in the center, with blue electrons orbiting around them.'
+      },
+      {
+        title: 'Chemical Bonds',
+        content: 'Main types: Ionic, Covalent, Metallic, and Hydrogen bonds',
+        location: 'Four-Way Hallway',
+        description: 'A hallway that splits into four paths, each representing a different bond type - one with magnets (ionic), one with shared objects (covalent), one with a sea of floating items (metallic), and one with a thin water bridge (hydrogen).'
+      },
+      {
+        title: 'pH Scale',
+        content: 'pH scale ranges from 0 (acidic) to 14 (basic)',
+        location: 'Rainbow Staircase',
+        description: 'A 14-step staircase changing from red (acidic) at the bottom to purple (basic) at the top, with green neutral steps in the middle.'
+      },
+      {
+        title: 'States of Matter',
+        content: 'Solid, Liquid, Gas, and Plasma',
+        location: 'Transformation Chamber',
+        description: 'A room with four distinct sections - a frozen zone (solid), a flowing fountain (liquid), a misty area (gas), and a contained lightning display (plasma).'
+      }
+    ]
+    
+    for (const student of students) {
+      try {
+        console.log(`Creating memory structures for student ${student.name || student.email}...`)
+        
+        // Create a story method (linked list) for Algebra concepts
+        let previousStoryNodeId = null
+        for (const concept of algebraConcepts) {
+          try {
+            // Create note
+            const note = await prisma.note.create({
+              data: {
+                title: `${concept.title} for ${student.name || student.email}`, // Make titles unique
+                content: concept.content,
+                userId: student.id,
+                tags: ['algebra', 'math', 'formula'],
+                type: 'permanent',
+                mnemonicType: 'storyMethod',
+                processed: true
+              }
+            })
+            
+            // Create memory node
+            const memoryNode = await prisma.memoryNode.create({
+              data: {
+                noteId: note.id,
+                content: concept.content,
+                description: `Visualization for ${concept.title}`,
+                position: algebraConcepts.indexOf(concept)
+              }
+            })
+            
+            // Create story node
+            const storyNode = await prisma.storyNode.create({
+              data: {
+                memoryNodeId: memoryNode.id,
+                storyText: concept.storyElement,
+                previousNodeId: previousStoryNodeId
+              }
+            })
+            
+            // Update previous node to point to this one if it exists
+            if (previousStoryNodeId) {
+              await prisma.storyNode.update({
+                where: { id: previousStoryNodeId },
+                data: { nextNodeId: storyNode.id }
+              })
+            }
+            
+            previousStoryNodeId = storyNode.id
+            console.log(`Created algebra concept: ${concept.title}`)
+          } catch (error) {
+            console.error(`Error creating algebra concept ${concept.title} for ${student.name || student.email}:`, error.message)
+          }
+        }
+        
+        // Create a memory palace for Chemistry concepts
+        try {
+          const palace = await prisma.palace.create({
+            data: {
+              name: `Chemistry Memory Palace for ${student.name || student.email}`,
+              description: "A mental structure for organizing chemistry concepts",
+              userId: student.id
+            }
+          })
+          
+          // Create rooms in the palace
+          for (const concept of chemistryConcepts) {
+            try {
+              // Create a room for each concept
+              const room = await prisma.room.create({
+                data: {
+                  name: concept.location,
+                  description: concept.description,
+                  palaceId: palace.id
+                }
+              })
+              
+              // Create note
+              const note = await prisma.note.create({
+                data: {
+                  title: `${concept.title} for ${student.name || student.email}`, // Make titles unique
+                  content: concept.content,
+                  userId: student.id,
+                  tags: ['chemistry', 'science'],
+                  type: 'permanent',
+                  mnemonicType: 'memoryPalace',
+                  processed: true
+                }
+              })
+              
+              // Create memory node
+              const memoryNode = await prisma.memoryNode.create({
+                data: {
+                  noteId: note.id,
+                  content: concept.content,
+                  description: concept.description,
+                  position: chemistryConcepts.indexOf(concept)
+                }
+              })
+              
+              // Create palace node
+              await prisma.palaceNode.create({
+                data: {
+                  memoryNodeId: memoryNode.id,
+                  location: concept.location,
+                  roomId: room.id,
+                  coordinates: { x: Math.random() * 100, y: Math.random() * 100, z: Math.random() * 100 }
+                }
+              })
+              
+              console.log(`Created chemistry concept: ${concept.title}`)
+            } catch (error) {
+              console.error(`Error creating chemistry concept ${concept.title} for ${student.name || student.email}:`, error.message)
+            }
+          }
+        } catch (error) {
+          console.error(`Error creating memory palace for ${student.name || student.email}:`, error.message)
+        }
+      } catch (error) {
+        console.error(`Error processing student ${student.name || student.email}:`, error.message)
+      }
+    }
+    
+    console.log('Memory structures created successfully')
+  }
+  
+  // Execute memory structure creation
+  try {
+    await createMemoryStructures()
+  } catch (error) {
+    console.error("Error creating memory structures:", error)
+  }
+  
+  // Create classes and enroll students
+  const createClasses = async () => {
+    console.log('Starting to create classes...')
+    
+    // Find teacher and students
+    const teacher = await prisma.user.findFirst({
+      where: { role: 'TEACHER' }
+    })
+    
+    if (!teacher) {
+      console.log('No teacher found, skipping class creation')
+      return
+    }
+    
+    const students = await prisma.user.findMany({
+      where: { role: 'STUDENT' },
+      take: 30
+    })
+    
+    // Create classes for each course
+    const courses = await prisma.course.findMany()
+    
+    // Generate a unique class code
+    const generateClassCode = () => {
+      const characters = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Removed similar-looking characters
+      let code = ''
+      for (let i = 0; i < 6; i++) {
+        code += characters.charAt(Math.floor(Math.random() * characters.length))
+      }
+      return code
+    }
+    
+    // Class creation logic
+    for (const course of courses) {
+      try {
+        // Create different class periods for Algebra I and Chemistry only
+        if (course.slug === 'algebra-i' || course.slug === 'chemistry') {
+          const periods = ['1st Period', '3rd Period', '5th Period']
+          
+          for (const period of periods) {
+            const className = `${course.title} - ${period}`
+            const classCode = generateClassCode()
+            
+            console.log(`Creating class: ${className} with code ${classCode}`)
+            
+            // Create the class
+            const newClass = await prisma.class.create({
+              data: {
+                name: className,
+                description: `${course.title} ${period} with ${teacher.name || 'Teacher'}`,
+                courseId: course.id,
+                teacherId: teacher.id,
+                classCode: classCode,
+                academicYear: '2024-2025',
+                term: 'Spring',
+                startDate: new Date('2025-01-15'),
+                endDate: new Date('2025-06-15'),
+                isActive: true
+              }
+            })
+            
+            // Enroll students in this class (randomly distribute students)
+            const studentsForThisClass = students.filter(() => Math.random() > 0.6)
+            if (studentsForThisClass.length === 0) {
+              // If no students were randomly selected, select at least a few
+              const minStudents = Math.min(5, students.length)
+              for (let i = 0; i < minStudents; i++) {
+                studentsForThisClass.push(students[i])
+              }
+            }
+            
+            for (const student of studentsForThisClass) {
+              try {
+                const enrollment = await prisma.classEnrollment.create({
+                  data: {
+                    userId: student.id,
+                    classId: newClass.id,
+                    status: 'ACTIVE'
+                  }
+                })
+                
+                console.log(`Enrolled student ${student.name || student.email} in ${className}`)
+              } catch (error) {
+                console.error(`Error enrolling student ${student.name || student.email} in ${className}:`, error.message)
+              }
+            }
+            
+            // Create some assignments for the class
+            const assignments = [
+              {
+                title: 'Introduction Assignment',
+                description: 'Get to know the basics of the course content.',
+                dueDate: new Date('2025-01-30'),
+                pointsPossible: 10
+              },
+              {
+                title: 'Chapter 1 Review',
+                description: 'Answer the review questions for Chapter 1.',
+                dueDate: new Date('2025-02-15'),
+                pointsPossible: 20
+              },
+              {
+                title: 'Mid-term Project',
+                description: 'Complete a project demonstrating your understanding of key concepts.',
+                dueDate: new Date('2025-03-30'),
+                pointsPossible: 50
+              }
+            ]
+            
+            for (const assignment of assignments) {
+              try {
+                await prisma.assignment.create({
+                  data: {
+                    ...assignment,
+                    classId: newClass.id
+                  }
+                })
+                
+                console.log(`Created assignment: ${assignment.title} for ${className}`)
+              } catch (error) {
+                console.error(`Error creating assignment ${assignment.title} for ${className}:`, error.message)
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error(`Error creating classes for course ${course.title}:`, error.message)
+      }
+    }
+    
+    console.log('Classes created successfully')
+  }
+  
+  // Execute class creation
+  try {
+    await createClasses()
+  } catch (error) {
+    console.error("Error creating classes:", error)
+  }
+}
+
+main()
+  .catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

@@ -1,26 +1,379 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Core palette - Apple-inspired neutrals with cyberpunk accents */
+  --black: 0 0% 0%;
+  --white: 0 0% 100%;
+  --dark: 220 40% 10%;
+  --light: 0 0% 98%;
+  
+  /* Cyberpunk neons */
+  --neon-blue: 210 100% 65%;
+  --neon-purple: 270 100% 65%;
+  --neon-pink: 320 100% 65%;
+  --neon-teal: 180 100% 65%;
+  
+  /* MOMA-inspired artistic accents */
+  --accent-red: 350 95% 60%;
+  --accent-yellow: 40 95% 60%;
+  --accent-green: 140 70% 50%;
+  
+  /* System colors */
+  --background: var(--dark);
+  --foreground: var(--light);
+  --muted: 220 40% 20%;
+  --muted-foreground: 220 10% 80%;
+  --card: 220 40% 13%;
+  --card-foreground: var(--light);
+  --border: 220 40% 25%;
+  --input: 220 40% 16%;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Base styles */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* Cyberpunk grid overlay */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    linear-gradient(90deg, hsla(var(--dark), 0) 99.5%, hsla(var(--neon-blue), 0.3) 100%),
+    linear-gradient(0deg, hsla(var(--dark), 0) 99.5%, hsla(var(--neon-blue), 0.3) 100%);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.2;
+}
+
+/* Abstract art background - MOMA inspired */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: 
+    radial-gradient(circle at 20% 20%, hsla(var(--neon-purple), 0.15), transparent 40%),
+    radial-gradient(circle at 80% 30%, hsla(var(--neon-teal), 0.15), transparent 40%),
+    radial-gradient(circle at 40% 80%, hsla(var(--neon-pink), 0.15), transparent 40%),
+    radial-gradient(circle at 70% 90%, hsla(var(--accent-yellow), 0.15), transparent 40%);
+  z-index: -1;
+  filter: blur(60px);
+}
+
+/* Apple-inspired typography */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+
+h1 {
+  font-size: 2.5rem;
+  background: linear-gradient(135deg, hsl(var(--neon-blue)), hsl(var(--neon-purple)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+h2 {
+  font-size: 2rem;
+}
+
+h3 {
+  font-size: 1.5rem;
+}
+
+p {
+  line-height: 1.6;
+}
+
+/* Neo-brutalist card - MOMA inspired with Apple refinement */
+.neo-card {
+  background-color: hsla(var(--card), 0.7);
+  backdrop-filter: blur(20px);
+  border: 1px solid hsla(var(--border), 0.3);
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 
+    0 10px 30px -5px rgba(0, 0, 0, 0.3),
+    0 0 0 1px hsla(var(--border), 0.1);
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.neo-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, 
+    hsl(var(--neon-blue)), 
+    hsl(var(--neon-purple)), 
+    hsl(var(--neon-pink)), 
+    hsl(var(--neon-teal)));
+  z-index: 1;
+}
+
+.neo-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 20px 40px -5px rgba(0, 0, 0, 0.4),
+    0 0 0 1px hsla(var(--border), 0.2);
+}
+
+/* Dashboard specific styles */
+.dashboard-stat-card {
+  background-color: hsla(var(--card), 0.8);
+  border-radius: 16px;
+  padding: 1.25rem;
+  transition: all 0.25s ease;
+  border: 1px solid hsla(var(--border), 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.dashboard-stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.dashboard-nav {
+  display: flex;
+  background-color: hsla(var(--card), 0.6);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 0.5rem;
+  border: 1px solid hsla(var(--border), 0.2);
+}
+
+.dashboard-nav-item {
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: all 0.2s ease;
+}
+
+.dashboard-nav-item:hover {
+  background-color: hsla(var(--background), 0.5);
+}
+
+.dashboard-nav-item.active {
+  background-color: hsla(var(--neon-blue), 0.15);
+  color: hsl(var(--neon-blue));
+}
+
+.dashboard-quick-action-btn {
+  display: flex;
+  align-items: center;
+  padding: 0.875rem;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  background-color: hsla(var(--card), 0.7);
+  border: 1px solid transparent;
+}
+
+.dashboard-quick-action-btn:hover {
+  background-color: hsla(var(--card), 0.9);
+  border-color: hsla(var(--border), 0.3);
+  transform: translateY(-2px);
+}
+
+/* Apple-inspired buttons with cyberpunk accents */
+.neo-button {
+  background-color: hsla(var(--neon-blue), 0.9);
+  color: white;
+  font-weight: 500;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  border: none;
+  transition: all 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.neo-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    hsla(var(--white), 0), 
+    hsla(var(--white), 0.2), 
+    hsla(var(--white), 0));
+  transition: all 0.5s ease;
+}
+
+.neo-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.neo-button:hover::before {
+  left: 100%;
+}
+
+.neo-button-secondary {
+  background-color: hsla(var(--neon-purple), 0.9);
+}
+
+.neo-button-accent {
+  background-color: hsla(var(--neon-pink), 0.9);
+}
+
+.neo-button-outline {
+  background-color: transparent;
+  border: 1px solid hsla(var(--neon-blue), 0.6);
+  color: hsl(var(--neon-blue));
+}
+
+.neo-button-outline:hover {
+  background-color: hsla(var(--neon-blue), 0.1);
+}
+
+/* Cyberpunk input fields with Apple refinement */
+.neo-input {
+  background-color: hsla(var(--input), 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid hsla(var(--border), 0.3);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  color: hsl(var(--foreground));
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.neo-input:focus {
+  outline: none;
+  border-color: hsla(var(--neon-blue), 0.6);
+  box-shadow: 0 0 0 3px hsla(var(--neon-blue), 0.2);
+}
+
+/* MOMA-inspired navigation */
+.neo-nav {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem 0;
+}
+
+.neo-nav-item {
+  color: hsla(var(--foreground), 0.7);
+  font-weight: 500;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+.neo-nav-item::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  width: 0;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(var(--neon-blue)), hsl(var(--neon-purple)));
+  transition: width 0.2s ease;
+}
+
+.neo-nav-item:hover {
+  color: hsl(var(--foreground));
+}
+
+.neo-nav-item:hover::after {
+  width: 100%;
+}
+
+.neo-nav-item-active {
+  color: hsl(var(--foreground));
+}
+
+.neo-nav-item-active::after {
+  width: 100%;
+}
+
+/* Cyberpunk grid layout */
+.neo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Glassmorphism container - Apple style */
+.neo-glass {
+  background-color: hsla(var(--card), 0.5);
+  backdrop-filter: blur(20px);
+  border: 1px solid hsla(var(--border), 0.2);
+  border-radius: 24px;
+  padding: 2rem;
+}
+
+/* Neon text effects */
+.neon-text {
+  color: hsl(var(--neon-blue));
+  text-shadow: 0 0 5px hsla(var(--neon-blue), 0.5);
+}
+
+.neon-text-purple {
+  color: hsl(var(--neon-purple));
+  text-shadow: 0 0 5px hsla(var(--neon-purple), 0.5);
+}
+
+.neon-text-pink {
+  color: hsl(var(--neon-pink));
+  text-shadow: 0 0 5px hsla(var(--neon-pink), 0.5);
+}
+
+/* MOMA-inspired artistic divider */
+.neo-divider {
+  height: 1px;
+  background: linear-gradient(90deg, 
+    transparent, 
+    hsla(var(--neon-blue), 0.5), 
+    hsla(var(--neon-purple), 0.5), 
+    hsla(var(--neon-pink), 0.5), 
+    transparent);
+  margin: 2rem 0;
+  border: none;
+}
+
+/* Utility classes */
+.text-gradient {
+  background: linear-gradient(135deg, hsl(var(--neon-blue)), hsl(var(--neon-purple)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-gradient-alt {
+  background: linear-gradient(135deg, hsl(var(--neon-pink)), hsl(var(--neon-teal)));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Animation utilities */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
